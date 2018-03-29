@@ -1,29 +1,29 @@
 # Site settings
-title: BLackBones Blog
+title: BlackBones Blog
 SEOTitle: 黑色骨头的博客
 header-img: img/post-bg-desk.jpg
 email: 823053896@qq.com
-description: "Every failure is leading towards success."
-keyword: "Black,Bones, iOS, Apple, iPhone"
+description: "我只是一个代码的搬运工，有时候还搬不动"
+keyword: "Black,Bones, iOS,Swift, Apple, iPhone"
 url: "http://blackbones.github.io"          # your host, for absolute URL
 baseurl: ""      # for example, '/blog' if your blog hosted on 'host/blog'
 github_repo: "https://github.com/BlackBones/blackbones.github.io.git" # you code repository
 
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
-sidebar-about-description: "Goals determine what you going to be!"
-sidebar-avatar: /img/about-BY-gentle.jpg      # use absolute URL, seeing it's used in both `/` and `/about/`
+sidebar-about-description: "Good good study,day day up"
+sidebar-avatar: /img/avatar_about.jpg      # use absolute URL, seeing it's used in both `/` and `/about/`
 
 
 
 # SNS settings
 RSS: false
-# weibo_username:     qiubaiying
-zhihu_username:     qiubaiying
-github_username:    qiubaiying
-facebook_username:  baiying.qiu.7
-jianshu_username:   e71990ada2fd
-#twitter_username:   qiubaiying
+# weibo_username:    布鲁克的演唱会
+zhihu_username:      Borgliu
+github_username:     BlackBones
+facebook_username:   
+jianshu_username:    7fe005b3c783
+#twitter_username:   BlackBones
 
 
 
@@ -62,11 +62,11 @@ kramdown:
 # Gitalk
 gitalk:
   enable: true    #是否开启Gitalk评论
-  clientID: f2c84e7629bb1446c1a4                            #生成的clientID
-  clientSecret: ca6d6139d1e1b8c43f8b2e19492ddcac8b322d0d    #生成的clientSecret
-  repo: qiubaiying.github.io    #仓库名称
-  owner: qiubaiying    #github用户名
-  admin: qiubaiying
+  clientID: 881d7fa05be93a00712d                            #生成的clientID
+  clientSecret: ae2b78fb0301770cada27553531ea7234671e733    #生成的clientSecret
+  repo: blackbones.github.io    #仓库名称
+  owner: blackbones    #github用户名
+  admin: blackbones
   distractionFreeMode: true #是否启用类似FB的阴影遮罩
 
 
@@ -74,11 +74,11 @@ gitalk:
 
 # Analytics settings
 # Baidu Analytics
-ba_track_id: b50bf2b12b5338a1845e33832976fd68
+ba_track_id: f753b814605c3c865e904d06b97a8880
 
 # Google Analytics
-ga_track_id: 'UA-90855596-1'            # Format: UA-xxxxxx-xx
-ga_domain: qiubaiying.top               # 默认的是 auto, 这里我是自定义了的域名，你如果没有自己的域名，需要改成auto
+#ga_track_id: 'UA-90855596-1'            # Format: UA-xxxxxx-xx
+#ga_domain: auto               # 默认的是 auto, 这里我是自定义了的域名，你如果没有自己的域名，需要改成auto
 
 
 
@@ -99,11 +99,8 @@ service-worker: true
 # Friends
 friends: [
     {
-        title: "WY",
-        href: "http://zhengwuyang.com"
-    },{
-        title: "简书·BY",
-        href: "http://www.jianshu.com/u/e71990ada2fd"
+        title: "简书.布鲁克先生",
+        href: "https://www.jianshu.com/users/7fe005b3c783"
     },{
         title: "Apple",
         href: "https://apple.com"
