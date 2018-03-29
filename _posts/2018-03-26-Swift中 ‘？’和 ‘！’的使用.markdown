@@ -1,0 +1,113 @@
+
+---
+layout:     post
+title:      Swift中 ‘？’和 ‘！’的使用
+subtitle:   
+date:       2018-03-26
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - Swift
+---
+
+## ? 和 ！的本质
+
+? 和 ! 其实分别是Swift语言中对一种可选类型（ Optional) 操作的语法糖。 
+可选类型是什么呢？ Swift中使用可选类型(Optional)来声明一个没有初始值的属性。 
+
+例如： var name: String?
+
+上面这个Optional的声明，正确理解是”我声明了一个Optional类型值，它可能包含一个String值，也可能什么都不包含”，也就是说实际上我们声明的是Optional类型，而不是声明了一个String类型。
+
+## ? 的使用场景
+1. 声明Optional值变量
+2. 用在对Optional值操作中，用来判断是否能响应后面的操作
+3. 用于安全调用protocol的optional方法
+4. 使用 as? 向下转型(Downcast) 
+
+##### 1. 声明Optional值的变量
+声明Optional类型的变量时，如果不显式的赋值就会有个默认值nil。判断一个Optional的值是否有值，可以用if来判断：
+
+```
+if name {
+    //do sth with name
+}
+```
+
+##### 2. 用在对Optional值操作中，用来判断是否能响应后面的操作
+怎么使用Optional值呢？在使用Optional值的时候需要在具体的操作，比如调用方法、属性、下标索引等前面需要加上一个?，如果是nil值，会跳过后面的操作不执行，如果有值，可能就会拆包(unwrap)，然后对拆包后的值执行后面的操作，来保证执行这个操作的安全性，比如：
+
+```
+let hashValue = name?.hashValue 
+```
+
+##### 3. 用于安全调用protocol的optional方法
+
+```
+@objc protocol Downloadable {
+    @optional func download(toPath: String) -> Bool;
+}
+
+@objc class Content: Downloadable {
+    //download method not be implemented
+}
+
+var delegate: Downloadable = Downloadable()
+delegate.download?("some path")
+```
+因为上面的delegate是Downloadable类型的，它的download方法是optional，所以它的具体实现有没有download方法是不确定的。Swift提供了一种在参数括号前加上一个?的方式来安全地调用protocol的optional方法。
+
+##### 4. 使用 as? 向下转型(Downcast)
+另一篇文章再说明 as,as!,as?的异同。
+## ！ 的使用场景
+1. 强制对Optional值进行拆包(unwrap) 
+2. 声明隐式拆包变量，一般用于类中的属性 
+
+##### 1. 强制对Optional值拆包（硬解包）
+硬解包即直接在可选类型后面加一个感叹号（!）来表示它肯定有值。
+
+```
+var str1: String? = "Hello"
+let greeting = "World!"
+if (str1 != nil) {
+  let message = greeting + str1!
+  print(message)
+}
+```
+在这里，我们只是自己知道str1肯定有值, 所以才直接硬解包了str1变量。 但是万一有时候我们的感觉是错的, 那程序在运行时可能会出现严重的错误. 所以Swift中是推荐先检查可选类型是否有值, 然后再进行解包的!
+
+错误示范：
+
+```
+var str1:String?  // str1值可能是传过来的值或者从服务器获取的值
+let msg = "Hi"
+let txt = msg + str1! // runtime error
+```
+ 以上代码在编译阶段不会报错.因为使用了硬解包, 编译器认为可选类型是有值的, 所以编译是通过的. 当代码运行起来时, 知名的错误将会出现: `fatal error: Can't unwrap Optional.None`
+ 所以，对于  ! 操作符，这里的变量值一定要是非nil的！
+ 
+#####  2. 声明隐式拆包变量，一般用于类中的属性 
+其实， 这叫作隐式拆包（Implicitly Unwrapped Optionals），比如 对于会在viewDidLoad进行初始化的变量，可以直接定义为var str ：String！ 等于说你每次对这种类型的值操作时，都会自动在操作前补上一个!进行拆包，然后在执行后面的操作，当然如果该值是nil，会报错crash掉
+
+```
+// 在一个viewController里面，从xib里面拖一个UIImageView控件， 你会发现Xcode会自动给你转成下面的形式
+
+  @IBOutlet weak var headerBGImageView: UIImageView!
+
+/**
+ 声明Implicitly Unwrapped Optionals值，一般用于类中的属性
+*/
+```
+
+
+
+
+
+
+
+
+
+
+
+
