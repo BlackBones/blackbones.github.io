@@ -1,0 +1,107 @@
+---
+layout:     post
+title:      内存管理（MRC、ARC）
+subtitle:   MRC、ARC
+date:       2018-04-10
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - 内存管理
+---
+
+## MRC
+MRC时代的开发者，我是很佩服的。不过很庆幸的是，我并没有经历过，难以想象要自己去管理每一个对象的retain和release.
+
+## ARC
+还是来说说 ARC 全称叫 ARC(Automatic Reference Counting)。简单地说，就是代码中自动加入了retain/release，原先需要手动添加的用来处理内存管理的引用计数的代码可以自动地由编译器完成了。
+简单地理解ARC，就是通过指定的语法，让编译器在编译代码时，自动生成实例的引用计数管理部分代码，从而彻底解放程序员。
+
+#### 引用计数
+引用计数（Reference Count）是一个简单而有效的管理对象生命周期的方式。当我们创建一个新对象的时候，它的引用计数为 1，当有一个新的指针指向这个对象时，我们将其引用计数加 1，当某个指针不再指向这个对象是，我们将其引用计数减 1，当对象的引用计数变为 0 时，说明这个对象不再被任何指针指向了，这个时候我们就可以将对象销毁，回收内存。
+
+不过值得注意的是，当对象的最后一个引用消失了，对象被回收，这个时候的retainCount其实并不是0.
+
+如：
+
+```
+NSObject *object = [[NSObject alloc] init];
+NSLog(@"Reference Count = %u", [object retainCount]);
+[object release];
+NSLog(@"Reference Count = %u", [object retainCount]);
+```
+
+结果：
+
+```
+Reference Count = 1
+Reference Count = 1
+```
+
+这是为什么呢？因为该对象的内存已经被回收，而我们向一个已经被回收的对象发了一个 retainCount 消息，所以它的输出结果应该是不确定的，如果该对象所占的内存被复用了，那么就有可能造成程序异常崩溃。
+那为什么在这个对象被回收之后，这个不确定的值是 1 而不是 0 呢？这是因为当最后一次执行 release 时，系统知道马上就要回收内存了，就没有必要再将 retainCount 减 1 了，因为不管减不减 1，该对象都肯定会被回收，而对象被回收后，它的所有的内存区域，包括 retainCount 值也变得没有意义。不将这个值从 1 变成 0，可以减少一次内存的写操作，加速对象的回收。
+
+#### ARC 下的内存管理问题
+ARC 能够解决 iOS 开发中 90% 的内存管理问题，但是另外还有 10% 内存管理，是需要开发者自己处理的，这主要就是与底层 Core Foundation 对象交互的那部分，底层的 Core Foundation 对象由于不在 ARC 的管理下，所以需要自己维护这些对象的引用计数。
+
+盲目的依赖ARC，可能会出现两个问题：
+1. 使用block时，出现循环引用；
+2. 对于底层 Core Foundation 对象，需要自己手工管理它们的引用计数时，一脸懵逼。
+ 
+ 底层Core Foundation的东西，我知之甚少，等以后有所了解再来补上吧。
+ 这次就说说循环引用（Reference Cycle）。
+ 
+ **循环引用（Reference Cycle）**
+ 引用计数这种管理内存的方式虽然很简单，但是有一个比较大的瑕疵，即它不能很好的解决循环引用问题。如下图所示：对象 A 和对象 B，相互引用了对方作为自己的成员变量，只有当自己销毁时，才会将成员变量的引用计数减 1。因为对象 A 的销毁依赖于对象 B 销毁，而对象 B 的销毁与依赖于对象 A 的销毁，这样就造成了我们称之为循环引用（Reference Cycle）的问题，这两个对象即使在外界已经没有任何指针能够访问到它们了，它们也无法被释放
+ ![](https://ws1.sinaimg.cn/large/006tNc79gy1fq8hm72e73j30f404hmx3.jpg)
+ 多个对象之间同样存在循环引用，多个对象依次持有对方，形成一个环，就造成了循环引用。这个环越大，涉及对象越多，越难发现。
+ 如：
+ ![](https://ws4.sinaimg.cn/large/006tNc79gy1fq8huik6toj30gn0c6jrj.jpg)
+
+**解决循环引用**
+1. 主动断开循环应用
+2. 使用弱引用
+3. 使用Xcode检测。 
+
+1.主动断开循环引用
+我们明确知道存在循环引用，在合理的位置主动断开一个引用。
+
+![](https://ws2.sinaimg.cn/large/006tNc79gy1fq8jh32o7fj30na0hq0tk.jpg)
+不过，主动断开循环引用这种操作依赖于程序员自己手工显式地控制，相当于回到了以前 “谁申请谁释放” 的内存管理年代，它依赖于程序员自己有能力发现循环引用并且知道在什么时机断开循环引用回收内存（这通常与具体的业务逻辑相关），所以这种解决方法并不常用，更常见的办法是使用弱引用 (weak reference) 的办法
+
+**弱引用 (weak reference)**
+弱引用虽然持有对象，但是并不增加引用计数，这样就避免了循环引用的产生。在 iOS 开发中，弱引用通常在 delegate 模式中使用。举个例子来说，两个 ViewController A 和 B，ViewController A 需要弹出 ViewController B，让用户输入一些内容，当用户输入完成后，ViewController B 需要将内容返回给 ViewController A。这个时候，View Controller 的 delegate 成员变量通常是一个弱引用，以避免两个 ViewController 相互引用对方造成循环引用问题，如下所示：
+![](https://ws2.sinaimg.cn/large/006tNc79gy1fq8jrslktmj307w0gamx7.jpg)
+
+弱引用的实现原理是这样，系统对于每一个有弱引用的对象，都维护一个表来记录它所有的弱引用的指针地址。这样，当一个对象的引用计数为 0 时，系统就通过这张表，找到所有的弱引用指针，继而把它们都置成 nil。
+从这个原理中，我们可以看出，弱引用的使用是有额外的开销的。虽然这个开销很小，但是如果一个地方我们肯定它不需要弱引用的特性，就不应该盲目使用弱引用。举个例子，有人喜欢在手写界面的时候，将所有界面元素都设置成 weak 的，这某种程度上与 Xcode 通过 Storyboard 拖拽生成的新变量是一致的。但是我个人认为这样做并不太合适。因为：
+1.我们在创建这个对象时，需要注意临时使用一个强引用持有它，否则因为 weak 变量并不持有对象，就会造成一个对象刚被创建就销毁掉。
+2.大部分 ViewController 的视图对象的生命周期与 ViewController 本身是一致的，没有必要额外做这个事情。
+3.早先苹果这么设计，是有历史原因的。在早年，当时系统收到 Memory Warning 的时候，ViewController 的 View 会被 unLoad 掉。这个时候，使用 weak 的视图变量是有用的，可以保持这些内存被回收。但是这个设计已经被废弃了，替代方案是将相关视图的 CALayer 对应的 CABackingStore 类型的内存区会被标记成 volatile 类型，详见《再见，viewDidUnload方法》。
+
+**使用 Xcode 检测循环引用**
+坦白说，这种方式我没有用过，以后可以试试。
+Xcode 的 Instruments 工具集可以很方便的检测循环引用。为了测试效果，我们在一个测试用的 ViewController 中填入以下代码，该代码中的 firstArray 和 secondArray 相互引用了对方，构成了循环引用。
+
+```
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    NSMutableArray *firstArray = [NSMutableArray array];
+    NSMutableArray *secondArray = [NSMutableArray array];
+    [firstArray addObject:secondArray];
+    [secondArray addObject:firstArray];
+}
+```
+在 Xcode 的菜单栏选择：Product -> Profile，然后选择 “Leaks”，再点击右下角的”Profile” 按钮开始检测。如下图
+![](https://ws1.sinaimg.cn/large/006tNc79gy1fq8k3wd3bij30le0c1gmd.jpg)
+这个时候 iOS 模拟器会运行起来，我们在模拟器里进行一些界面的切换操作。稍等几秒钟，就可以看到 Instruments 检测到了我们的这次循环引用。Instruments 中会用一条红色的条来表示一次内存泄漏的产生。如下图所示：
+![](https://ws1.sinaimg.cn/large/006tNc79gy1fq8k4h3byaj30f206imx9.jpg)
+我们可以切换到 Leaks 这栏，点击”Cycles & Roots”，就可以看到以图形方式显示出来的循环引用。这样我们就可以非常方便地找到循环引用的对象了。
+![](https://ws1.sinaimg.cn/large/006tNc79gy1fq8k51zo7tj30lw0bgt90.jpg)
+
+
+注：大部分的内容都来源网络，再加上一些自己的理解，主要是为自己梳理知识，没有其他意思的，如有博主觉得不妥的地方，请指出，立马修改。
+
+
+
