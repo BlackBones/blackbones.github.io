@@ -1,0 +1,425 @@
+---
+layout:     post
+title:      runtime的简单理解
+subtitle:   runtime 
+date:       2018-04-18
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - runtime
+---
+
+[http://www.cocoachina.com/ios/20150901/13173.html]()
+[https://blog.csdn.net/coyote1994/article/details/52355026]()
+
+## 一. runtime概念
+
+Objective-C是基于 C 的，它为 C 添加了面向对象的特性。它将很多静态语言在编译和链接时期做的事放到了 runtime 运行时来处理，可以说runtime是我们 Objective-C 幕后工作者。
+
+runtime（简称运行时），是一套 纯C(C和汇编写的) 的API。而 OC 就是运行时机制，也就是在运行时候的一些机制，其中最主要的是消息机制。
+
+对于 C 语言，函数的调用在编译的时候会决定调用哪个函数。
+
+OC的函数调用称为**消息发送**，属于动态调用过程。在编译的时候并不能决定真正调用哪个函数，只有在真正运行的时候才会根据函数的名称找到对应的函数来调用。
+
+事实证明：在编译阶段，OC 可以调用任何函数，即使这个函数并未实现，只要声明过就不会报错，只有当运行的时候才会报错，这是因为OC是运行时动态调用的。而 C 语言调用未实现的函数就会报错。
+
+
+## 二. 原理
+OC都是对于C的封装，所以OC的代码在程序运行过程中都会被转化成C代码执行，如：
+
+```
+[target doSomething];
+```
+实际被转化成：
+
+```
+objc_msgSend(target, @selector(doSomething));
+```
+OC中每一个对象，其实内部都是一个结构体，
+
+
+
+```
+在runtime中相关的定义：
+
+/// 描述类中的一个方法
+typedef struct objc_method *Method;
+
+/// 实例变量
+typedef struct objc_ivar *Ivar;
+
+/// 类别Category
+typedef struct objc_category *Category;
+
+/// 类中声明的属性
+typedef struct objc_property *objc_property_t;
+```
+
+
+类在runtime中的表示
+
+```
+struct objc_class {
+    Class isa;  //指针，顾名思义，表示是一个什么，
+                //实例的isa指向类对象，类对象的isa指向元类
+#if !__OBJC2__
+    Class super_class;  //指向父类
+    const char *name;  //类名
+    long version;   
+    long info;
+    long instance_size
+    struct objc_ivar_list *ivars //成员变量列表
+    struct objc_method_list **methodLists; //方法列表
+    struct objc_cache *cache;//缓存
+    //一种优化，调用过的方法存入缓存列表，下次调用先找缓存
+    struct objc_protocol_list *protocols //协议列表
+    #endif
+} OBJC2_UNAVAILABLE;
+/* Use `Class` instead of `struct objc_class *` */
+```
+
+引用大牛的话：
+
+**每一个对象本质上都是一个类的实例。其中类定义了成员变量和成员方法的列表。对象通过对象的isa指针指向类。**
+
+**每一个类本质上都是一个对象，类其实是元类（meteClass）的实例。元类定义了类方法的列表。类通过类的isa指针指向元类**。
+
+**所有的元类最终继承一个根元类，根元类isa指针指向本身，形成一个封闭的内循环。**
+
+
+
+## 三. 消息机制
+以下是方法调用在运行时的过程：
+
+```
+如果用实例对象调用实例方法，会到实例的isa指针指向的对象（也就是类对象）操作。
+如果调用的是类方法，就会到类对象的isa指针指向的对象（也就是元类对象）中操作。
+
+首先，在相应操作的对象中的缓存方法列表中找调用的方法，如果找到，转向相应实现并执行。
+如果没找到，在相应操作的对象中的方法列表中找调用的方法，如果找到，转向相应实现执行
+如果没找到，去父类指针所指向的对象中执行1，2.
+以此类推，如果一直到根类还没找到，转向拦截调用。
+如果没有重写拦截调用的方法，程序报错。
+```
+**值得注意：**
+通常我们重写父类的方法，其实并没有覆盖掉父类的方法，只是在当前类对象中找到了这个方法后就不会再去父类中找了。
+如果想调用已经重写过的方法的父类的实现，只需使用super这个关键字就行了。
+
+
+## 四. runtime的应用
+ 
+ 简单地说，利用runtime，我们可以在程序运行的过程中，**动态创建一个类；动态的为一个类添加属性/方法；以及遍历一个类所有的成员变量、方法**。
+#### 1. 动态添加一个类
+
+**（“KVO”的实现是利用了runtime能够动态添加类）**
+当你对一个对象进行观察时, 系统会自动新建一个类继承自原类, 然后重写被观察属性的setter方法. 然后重写的setter方法会负责在调用原setter方法前后通知观察者. 然后把原对象的isa指针指向这个新类, 我们知道, 对象是通过isa指针去查找自己是属于哪个类, 并去所在类的方法列表中查找方法的, 所以这个时候这个对象就自然地变成了新类的实例对象.
+代码：
+
+```
+// 创建一个类(size_t extraBytes该参数通常指定为0, 该参数是分配给类和元类对象尾部的索引ivars的字节数。)
+Class clazz = objc_allocateClassPair([NSObject class], "GoodPerson", 0);
+
+// 添加ivar
+// @encode(aType) : 返回该类型的C字符串
+class_addIvar(clazz, "_name", sizeof(NSString *), log2(sizeof(NSString *)), @encode(NSString *));
+
+class_addIvar(clazz, "_age", sizeof(NSUInteger), log2(sizeof(NSUInteger)), @encode(NSUInteger));
+
+// 注册该类
+objc_registerClassPair(clazz);
+
+// 创建实例对象
+id object = [[clazz alloc] init];
+
+// 设置ivar
+[object setValue:@"Tracy" forKey:@"name"];
+
+Ivar ageIvar = class_getInstanceVariable(clazz, "_age");
+object_setIvar(object, ageIvar, @18);
+
+// 打印对象的类和内存地址
+NSLog(@"%@", object);
+
+// 打印对象的属性值
+NSLog(@"name = %@, age = %@", [object valueForKey:@"name"], object_getIvar(object, ageIvar));
+
+// 当类或者它的子类的实例还存在，则不能调用objc_disposeClassPair方法
+object = nil;
+
+// 销毁类
+objc_disposeClassPair(clazz);
+```
+
+结果：
+
+```
+<GoodPerson: 0x1002039b0>
+name = Tracy, age = 18
+```
+这样就在程序运行时，添加了一个继承NSObject的GoodPerson类，并添加了name，age属性。
+
+#### 2. 获取一个类所有的属性
+
+**1. 打印一类所有的成员变量，方法**
+
+```
+Person *p = [[Person alloc] init];
+[p setValue:@"Kobe" forKey:@"name"];
+[p setValue:@18 forKey:@"age"];
+//    p.address = @"广州大学城";
+p.weight = 110.0f;
+
+// 1.打印所有ivars
+unsigned int ivarCount = 0;
+// 用一个字典装ivarName和value
+NSMutableDictionary *ivarDict = [NSMutableDictionary dictionary];
+Ivar *ivarList = class_copyIvarList([p class], &ivarCount);
+for(int i = 0; i < ivarCount; i++){
+    NSString *ivarName = [NSString stringWithUTF8String:ivar_getName(ivarList[i])];
+    id value = [p valueForKey:ivarName];
+
+    if (value) {
+        ivarDict[ivarName] = value;
+    } else {
+        ivarDict[ivarName] = @"值为nil";
+    }
+}
+// 打印ivar
+for (NSString *ivarName in ivarDict.allKeys) {
+    NSLog(@"ivarName:%@, ivarValue:%@",ivarName, ivarDict[ivarName]);
+}
+
+// 2.打印所有properties
+unsigned int propertyCount = 0;
+// 用一个字典装propertyName和value
+NSMutableDictionary *propertyDict = [NSMutableDictionary dictionary];
+objc_property_t *propertyList = class_copyPropertyList([p class], &propertyCount);
+for(int j = 0; j < propertyCount; j++){
+    NSString *propertyName = [NSString stringWithUTF8String:property_getName(propertyList[j])];
+    id value = [p valueForKey:propertyName];
+
+    if (value) {
+        propertyDict[propertyName] = value;
+    } else {
+        propertyDict[propertyName] = @"值为nil";
+    }
+}
+// 打印property
+for (NSString *propertyName in propertyDict.allKeys) {
+    NSLog(@"propertyName:%@, propertyValue:%@",propertyName, propertyDict[propertyName]);
+}
+
+// 3.打印所有methods
+unsigned int methodCount = 0;
+// 用一个字典装methodName和arguments
+NSMutableDictionary *methodDict = [NSMutableDictionary dictionary];
+Method *methodList = class_copyMethodList([p class], &methodCount);
+for(int k = 0; k < methodCount; k++){
+    SEL methodSel = method_getName(methodList[k]);
+    NSString *methodName = [NSString stringWithUTF8String:sel_getName(methodSel)];
+
+    unsigned int argumentNums = method_getNumberOfArguments(methodList[k]);
+
+    methodDict[methodName] = @(argumentNums - 2); // -2的原因是每个方法内部都有self 和 selector 两个参数
+}
+// 打印method
+for (NSString *methodName in methodDict.allKeys) {
+    NSLog(@"methodName:%@, argumentsCount:%@", methodName, methodDict[methodName]);
+}
+```
+
+结果：
+
+```
+ivarName:_name, ivarValue:Kobe
+ivarName:_age, ivarValue:18
+ivarName:_weight, ivarValue:110
+ivarName:_address, ivarValue:值为nil
+propertyName:address, propertyValue:值为nil
+propertyName:weight, propertyValue:110
+methodName:setWeight:, argumentsCount:1
+methodName:weight, argumentsCount:0
+methodName:setAddress:, argumentsCount:1
+methodName:address, argumentsCount:0
+methodName:.cxx_destruct, argumentsCount
+```
+
+
+**2. 动态变量控制**
+
+在程序中，XiaoMing的age是10，后来被runtime变成了20，来看看runtime是怎么做到的：
+
+```
+-(void)changeAge{
+     unsigned int count = 0;
+     //动态获取XiaoMing类中的所有属性[当然包括私有] 
+     Ivar *ivar = class_copyIvarList([self.xiaoMing class], &count);
+     //遍历属性找到对应age字段 
+     for (int i = 0; i<count; i++) {
+         Ivar var = ivar[i];
+         const char *varName = ivar_getName(var);
+         NSString *name = [NSString stringWithUTF8String:varName];
+         if ([name isEqualToString:@"_age"]) {
+             //修改对应的字段值成20
+             object_setIvar(self.xiaoMing, var, @"20");
+             break;
+         }
+     }
+     NSLog(@"XiaoMing's age is %@",self.xiaoMing.age);
+ }
+
+```
+**3. 在NSObject的分类中增加方法来避免使用KVC赋值的时候出现崩溃**
+不确定某个类是不是存在某个属性，可以利用runtime来判断，为NSObject添加分类，增加如下方法：
+
+```
+/**
+ *  判断类中是否有该属性
+ *
+ *  @param property 属性名称
+ *
+ *  @return 判断结果
+ */
+-(BOOL)hasProperty:(NSString *)property {
+    BOOL flag = NO;
+    u_int count = 0;
+    Ivar *ivars = class_copyIvarList([self class], &count);
+    for (int i = 0; i < count; i++) {
+        const char *propertyName = ivar_getName(ivars[i]);
+        NSString *propertyString = [NSString stringWithUTF8String:propertyName];
+        if ([propertyString isEqualToString:property]){
+            flag = YES;
+        }
+    }
+}
+```
+
+
+4. 自动的归档和解档
+[自动归档和解档](http://blog.csdn.net/coyote1994/article/details/52470653)
+
+5.  字典转模型
+[利用runtime实现字典转模型](http://blog.csdn.net/coyote1994/article/details/52470689)
+
+
+#### 3. 动态交换方法
+当然，我们可以对两个方法进行交换，但最大的应用是，根据需求，我们要改变一个方法的实现，但是又不能去动它的源代码(比如系统的方法或者一些开源库出现问题的时候)，这个时候runtime就派上用场了。
+
+a、为UIImage建一个分类（UIImage+Category）
+b、在分类中实现一个自定义方法，方法中写要在系统方法中加入的语句，比如版本判断
+
+```
++ (UIImage *)xh_imageNamed:(NSString *)name {
+    double version = [[UIDevice currentDevice].systemVersion doubleValue];
+    if (version >= 7.0) {
+        // 如果系统版本是7.0以上，使用另外一套文件名结尾是‘_os7’的扁平化图片
+        name = [name stringByAppendingString:@"_os7"];
+    }
+    return [UIImage xh_imageNamed:name];
+}
+```
+b、分类中重写UIImage的load方法，实现方法的交换（只要能让其执行一次方法交换语句，load再合适不过了）
+
+```
++ (void)load {
+    // 获取两个类的类方法
+    Method m1 = class_getClassMethod([UIImage class], @selector(imageNamed:));
+    Method m2 = class_getClassMethod([UIImage class], @selector(xh_imageNamed:));
+    // 开始交换方法实现
+    method_exchangeImplementations(m1, m2);
+}
+```
+**注意**：自定义方法中最后一定要再调用一下系统的方法，让其有加载图片的功能，但是由于方法交换，系统的方法名已经变成了我们自定义的方法名（有点绕，就是用我们的名字能调用系统的方法，用系统的名字能调用我们的方法），这就实现了系统方法的拦截！
+
+
+#### 4. 动态添加方法
+开发使用场景：如果一个类方法非常多，加载类到内存的时候也比较耗费资源，需要给每个方法生成映射表，可以使用动态给某个类，添加方法解决。
+
+经典面试题：有没有使用performSelector，其实主要想问你有没有动态添加过方法。
+
+简单使用：
+
+```
+@implementation ViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    // Do any additional setup after loading the view, typically from a nib.
+
+    Person *p = [[Person alloc] init];
+
+    // 默认person，没有实现eat方法，可以通过performSelector调用，但是会报错。
+    // 动态添加方法就不会报错
+    [p performSelector:@selector(eat)];
+
+}
+
+
+@end
+
+
+@implementation Person
+// void(*)()
+// 默认方法都有两个隐式参数，
+void eat(id self,SEL sel)
+{
+    NSLog(@"%@ %@",self,NSStringFromSelector(sel));
+}
+
+// 当一个对象调用未实现的方法，会调用这个方法处理,并且会把对应的方法列表传过来.
+// 刚好可以用来判断，未实现的方法是不是我们想要动态添加的方法
++ (BOOL)resolveInstanceMethod:(SEL)sel
+{
+
+    if (sel == @selector(eat)) {
+        // 动态添加eat方法
+
+        // 第一个参数：给哪个类添加方法
+        // 第二个参数：添加方法的方法编号
+        // 第三个参数：添加方法的函数实现（函数地址）
+        // 第四个参数：函数的类型，(返回值+参数类型) v:void @:对象->self :表示SEL->_cmd
+        class_addMethod(self, @selector(eat), eat, "v@:");
+
+    }
+
+    return [super resolveInstanceMethod:sel];
+}
+@end
+```
+
+
+#### 5. 利用运行时set和get这两个API，为类别关联属性
+
+步骤：
+
+1、创建一个类别，比如给任何一个对象都添加一个name属性，就是NSObject添加分类（NSObject+Category）
+
+2、先在.h 中@property 声明出get 和 set 方法，方便点语法调用
+
+```
+@property(nonatomic,copy)NSString *name;
+```
+
+3、在.m 中重写set 和 get 方法，内部利用runtime 给属性赋值和取值
+
+```
+char nameKey;
+
+- (void)setName:(NSString *)name {
+    // 将某个值跟某个对象关联起来，将某个值存储到某个对象中
+    objc_setAssociatedObject(self, &nameKey, name, OBJC_ASSOCIATION_COPY_NONATOMIC);
+}
+
+- (NSString *)name {
+    return objc_getAssociatedObject(self, &nameKey);
+}
+```
+
+#### 6. 万能界面跳转（使用了runtime的N多个方法）
+[万能界面跳转](https://blog.csdn.net/coyote1994/article/details/52472670)
+
+
+
+
