@@ -1,0 +1,16 @@
+---
+layout:     post
+title:      传递和响应机制
+subtitle:   传递和响应机制原理
+date:       2018-05-11
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - 响应机制 传递链
+---
+
+[史上最详细的iOS之事件的传递和响应机制-原理篇](https://www.jianshu.com/p/2e074db792ba)
+
+
+

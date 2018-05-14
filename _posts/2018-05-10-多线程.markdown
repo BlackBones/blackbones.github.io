@@ -1,0 +1,290 @@
+---
+layout:     post
+title:      iOS中的多线程
+subtitle:   GCD
+date:       2018-05-10
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - GCD NSThread NSOperation & NSOperationQueue Pthreads
+---
+
+[关于iOS多线程，你看我就够了](https://www.jianshu.com/p/0b0d9b1f1f19)
+
+[GCD全解析](https://www.jianshu.com/p/c582d705f68e)
+
+自己整理一下iOS开发中，多线程的几种方案，大体上有4套多线程的方法
+
+* Pthreads
+* NSThread
+* GCD
+* NSOperation & NSOperationQueue
+
+前两种自己基本没怎么用过，主要讲一下后面两种，GCD、NSOperation。这当中GCD也是自己平时开发中使用最多的。
+
+
+## GCD （Grand Central Dispatch）
+
+GCD 全称Grand Central Dispatch.
+GCD，最重要的是它会自动管理线程的生命周期（创建线程、调度任务、销毁线程），不需要我们自己动手管理，这点实在太爽，并且接口使用Block的方式，灵活方便，我最喜欢。
+
+#### 任务和队列
+
+**任务**：就是具体干什么，说白了就是一段代码，在 GCD 中就是一个 Block，所以添加任务十分方便。任务有两种执行方式： **同步执行** 和 **异步执行**，他们之间的区别是 是否会阻塞线程。
+
+**同步（sync**）：会阻塞当前线程并等待 Block 中的任务执行完毕，然后当前线程才会继续往下运行。 
+**异步（async**）：不会阻塞当前线程，当前线程会直接往下执行。
+
+**队列**：用于存放任务。一共有两种队列， **串行队列** 和 **并行队列**。
+
+**串行队列**：放到串行队列的任务，GCD 会 FIFO（先进先出） 地取出来一个，执行一个，然后取下一个，这样一个一个的执行。
+
+**并行队列**：放到并行队列的任务，GCD 也会 FIFO的取出来，但不同的是，它取出来一个就会放到别的线程，然后再取出来一个又放到另一个的线程。这样由于取的动作很快，忽略不计，看起来，所有的任务都是一起执行的。不过需要注意，GCD 会根据系统资源控制并行的数量，所以如果任务很多，它并不会让所有任务同时执行。
+
+##### 创建队列
+
+**主队列**：这是一个特殊的 串行队列。什么是主队列，大家都知道吧，它用于刷新 UI，任何需要刷新 UI 的工作都要在主队列执行，所以一般耗时的任务都要放到别的线程执行。
+
+
+```
+dispatch_queue_t queue = dispatch_get_main_queue();
+```
+
+系统给每个应用提供四个全局的并发队列，这四个队列分别有不同的优先级：高、默认、低以及后台，用户不能去创建全局队列，只能根据优先级去获取:
+
+```
+dispatch_queue_t queue  = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+```
+
+**创建自己的队列**：自己可以创建 串行队列, 也可以创建 并行队列。看下面的代码，它有两个参数:
+其中第一个参数是标识符，用于 DEBUG 的时候标识唯一的队列，可以为空，第二个才是最重要的。
+第二个参数用来表示创建的队列是串行的还是并行的，传入 DISPATCH_QUEUE_SERIAL 或 NULL 表示创建**串行队列**。传入 DISPATCH_QUEUE_CONCURRENT 表示创建**并行队列**。
+
+
+```
+  //串行队列
+  dispatch_queue_t queue = dispatch_queue_create("tk.bourne.testQueue", NULL);
+  dispatch_queue_t queue = dispatch_queue_create("tk.bourne.testQueue", DISPATCH_QUEUE_SERIAL);
+  //并行队列
+  dispatch_queue_t queue = dispatch_queue_create("tk.bourne.testQueue", DISPATCH_QUEUE_CONCURRENT);
+```
+
+##### 创建任务
+
+创建任务，添加到队列queue中，
+
+同步任务：
+
+```
+dispatch_sync(queue, ^{
+      //code here
+      NSLog(@"%@", [NSThread currentThread]);
+  });
+```
+
+异步任务：
+
+```
+dispatch_async(queue, ^{
+      //code here
+      NSLog(@"%@", [NSThread currentThread]);
+  });
+```
+
+1. 串行队列-同步任务
+2. 串行队列-异步任务
+3. 并发队列-同步任务
+4. 并发队列-异步任务（常用）
+
+#### Dispatch Group 队列组
+
+当我们想在gcd queue中所有的任务执行完毕之后做些特定事情的时候，也就是队列的同步问题，如果队列是串行的话，那将该操作最后添加到队列中即可，但如果队列是并行队列的话，这时候就可以利用dispatch_group来实现了，dispatch_group能很方便的解决同步的问题。dispatch_group_create可以创建一个group对象，然后可以添加block到该组里面，下面看下它的一些用法：
+
+##### dispatch_group_notify
+异步方式通知，不会阻塞线程
+
+```
+-(void)asyncGroupNotify
+{
+    NSLog(@"star");
+    dispatch_group_t group=dispatch_group_create();
+    dispatch_queue_t queue=dispatch_queue_create("com.GCD_demo.www", DISPATCH_QUEUE_CONCURRENT);
+    dispatch_group_async(group, queue, ^{
+        [NSThread sleepForTimeInterval:1];
+        NSLog(@"group_work_1");
+    });
+    dispatch_group_async(group, queue, ^{
+        [NSThread sleepForTimeInterval:6];
+        NSLog(@"group_work_2");
+    });
+    dispatch_group_async(group, queue, ^{
+        [NSThread sleepForTimeInterval:2];
+        NSLog(@"group_work_3");
+    });
+    
+    dispatch_group_notify(group, queue, ^{
+        NSLog(@"dispatch_group_Notify 结束");
+    });
+}
+```
+运行结果：
+
+```
+2016-07-21 13:51:40.600 GCD_Demo[9044:1162213] star
+2016-07-21 13:51:41.605 GCD_Demo[9044:1162359] group_work_1
+2016-07-21 13:51:42.608 GCD_Demo[9044:1162389] group_work_3
+2016-07-21 13:51:46.603 GCD_Demo[9044:1162349] group_work_2
+2016-07-21 13:51:46.605 GCD_Demo[9044:1162349] dispatch_group_Notify 结束
+```
+
+##### dispatch_group_wait
+会阻塞当前线程，知道任务都完成时才会继续执行下面的代码
+
+```
+-(void)asyncGroupWait
+{
+    NSLog(@"star");
+    dispatch_group_t group=dispatch_group_create();
+    dispatch_queue_t queue=dispatch_queue_create("com.GCD_demo.www", DISPATCH_QUEUE_CONCURRENT);
+    dispatch_group_async(group, queue, ^{
+        [NSThread sleepForTimeInterval:1];
+        NSLog(@"group_work_1");
+    });
+    dispatch_group_async(group, queue, ^{
+        [NSThread sleepForTimeInterval:6];
+        NSLog(@"group_work_2");
+    });
+    dispatch_group_async(group, queue, ^{
+        [NSThread sleepForTimeInterval:2];
+        NSLog(@"group_work_3");
+    });
+    
+    //在此设置了一个12秒的等待时间，如果group的执行结束没有到12秒那么就返回0
+    //如果执行group的执行时间超过了12秒，那么返回非0 数值，
+    //在使用dispatch_group_wait函数的时候，会阻塞当前线程，阻塞的时间 在wait函数时间值和当前group执行时间值取最小的。
+    long kk=dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 12 * NSEC_PER_SEC));
+    if(kk==0)
+    {
+         NSLog(@"dispatch_group_wait 结果1");
+    }
+    else
+    {
+         NSLog(@"dispatch_group_wait 结果2");
+    }
+    
+}
+
+```
+
+结果：
+
+```
+2016-07-21 13:56:47.471 GCD_Demo[9065:1165380] star
+2016-07-21 13:56:48.472 GCD_Demo[9065:1165494] group_work_1
+2016-07-21 13:56:49.476 GCD_Demo[9065:1165502] group_work_3
+2016-07-21 13:56:53.475 GCD_Demo[9065:1165485] group_work_2
+2016-07-21 13:56:53.475 GCD_Demo[9065:1165380] dispatch_group_wait 结果1
+```
+##### dispatch_group_enter&dispatch_group_leave
+假如我们不想使用dispatch_group_async异步的将任务丢到group中去执行，这时候就需要用到dispatch_group_enter跟dispatch_group_leave方法，这两个方法要配对出现，以下这两种方法是等价的：
+
+```
+-(void)asyncGroupEnter
+{
+    // 群组－统一监控一组任务
+    dispatch_group_t group = dispatch_group_create();
+    
+    dispatch_queue_t queue = dispatch_get_global_queue(0, 0);
+    
+    // 1> 入组 -> 之后的 block 会被 group 监听
+    // dispatch_group_enter 一定和 dispatch_group_leave 要配对出现
+    dispatch_group_enter(group);
+    dispatch_async(queue, ^{
+        NSLog(@"dispatch_async_work1");
+        
+        // block 的末尾，所有任务执行完毕后，添加一个出组
+        dispatch_group_leave(group);
+    });
+    
+    //  再次入组
+    dispatch_group_enter(group);
+    dispatch_async(queue, ^{
+        [NSThread sleepForTimeInterval:6];
+        
+        NSLog(@"dispatch_async_work1");
+        
+        // block 的末尾，所有任务执行完毕后，添加一个出组
+        dispatch_group_leave(group);
+    });
+    
+    // 群组结束
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+        NSLog(@"OVER");
+    });  
+    NSLog(@"come here");
+}
+
+```
+执行结果：
+
+```
+2016-07-21 15:21:40.707 GCD_Demo[9256:1205427] come here
+2016-07-21 15:21:40.707 GCD_Demo[9256:1205465] dispatch_async_work1
+2016-07-21 15:21:46.709 GCD_Demo[9256:1205460] dispatch_async_work1
+2016-07-21 15:21:46.710 GCD_Demo[9256:1205427] OVER
+```
+
+##### dispatch_after
+来延迟执行的GCD方法，因为在主线程中我们不能用sleep来延迟方法的调用，所以用它是最合适的
+
+##### dispatch_apply
+
+dispatch_apply类似一个for循环，会在指定的dispatch queue中运行block任务n次，如果队列是并发队列，则会并发执行block任务，dispatch_apply是一个同步调用，block任务执行n次后才返回
+
+##### dispatch_once
+
+整个程序运行中只会执行一次，使用dispatch_once可以简化代码并且彻底保证线程安全，开发者根本无须担心加锁或者同步。所有问题都由GCD在底层处理。由于每次调用时都必须使用完全相同的标记，所以标记要声明成static。所以用在单例模式上是最好的
+
+##### dispatch_barrier_async
+
+dispatch_barrier_async用于等待前面的任务执行完毕后自己才执行，而它后面的任务需等待它完成之后才执行。一个典型的例子就是数据的读写，通常为了防止文件读写导致冲突，我们会创建一个串行的队列，所有的文件操作都是通过这个队列来执行，比如FMDB，这样就可以避免读写冲突。不过其实这样效率是有提升的空间的，当没有更新数据时，读操作其实是可以并行进行的，而写操作需要串行的执行
+
+##### dispatch_set_target_queue
+
+1.系统的Global Queue是可以指定优先级的，那我们可以用到dispatch_set_target_queue这个方法来指定自己创建队列的优先级
+2.dispatch_set_target_queue除了能用来设置队列的优先级之外，还能够创建队列的层次体系，当我们想让不同队列中的任务同步的执行时，我们可以创建一个串行队列，然后将这些队列的target指向新创建的队列即可
+
+##### 死锁现象
+
+
+```
+NSLog("1111")
+dispatch_sync(dispatch_get_main_queue(), { () -> Void in 
+        NSLog("2222")
+})
+NSLog("3333")
+```
+结果：只会打印 “1111”。
+同步任务会阻塞当前线程，然后把 Block 中的任务放到指定的队列中执行，只有等到 Block 中的任务完成后才会让当前线程继续往下运行。
+那么这里的步骤就是：打印完第一句后，dispatch_sync 立即阻塞当前的主线程，然后把 Block 中的任务放到 main_queue 中，可是 main_queue 中的任务会被取出来放到主线程中执行，但主线程这个时候已经被阻塞了，所以 Block 中的任务就不能完成，它不完成，dispatch_sync 就会一直阻塞主线程，这就是死锁现象。导致主线程一直卡死。
+
+## NSOperation 和 NSOperationQueue
+
+NSOperation 是苹果公司对 GCD 的封装，完全面向对象，所以使用起来更好理解。 大家可以看到 NSOperation 和 NSOperationQueue 分别对应 GCD 的 任务 和 队列。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+

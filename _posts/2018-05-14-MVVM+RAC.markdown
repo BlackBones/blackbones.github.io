@@ -1,0 +1,18 @@
+---
+layout:     post
+title:      MVVM + RAC
+subtitle:   ReactiveCocoa 和 MVVM
+date:       2018-05-14
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - ReactiveCocoa MVVM
+---
+
+[ReactiveCocoa 和 MVVM 入门](http://www.cocoachina.com/ios/20150526/11930.html)
+
+[MVVM+RAC 从框架到实战](https://www.jianshu.com/p/3beb21d5def2)
+
+
+
