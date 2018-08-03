@@ -1,0 +1,270 @@
+---
+layout:     post
+title:      GCD的理解与使用（一）
+subtitle:   GCD 
+date:       2017-04-18
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - GCD 多线程
+---
+
+# 一、GCD简介
+iOS开发中，多线程的API主要有pathread，NSThread，NSOperation和GCD。pathread和NSThread反正我没有用过，，NSOperation是面向对象封装的一套API，而GCD则是一套纯C语言API。
+
+**GCD主要优点:**
+
+* 提供了易于使用的并发模型而不仅仅只是锁和线程，可以让我们轻松的进行多线程编程。
+* 自动利用更多的CPU内核。
+* 自动管理线程的生命周期，以及多线程调度。
+* 提供了简单创建单例的接口等等。
+
+# 二、Dispatch_Queue（队列）
+**GCD**中的队列和数据结构中的队列特性上一致，都是受限制的线性表，遵循FIFO(First In First Out),即新的任务需要在队尾加入，读取任务则从队首部读取，即先进先出。
+
+## 1. 两类队列
+**a. 串行队列（Serial Dispatch Queue）**
+简单理解串行队列就是按顺序执行一个任务，上一个任务执行完毕后执行下一个任务，现实中的例子，去银行办业务，只有一个窗口，大家有秩序的排队办业务，即是串行队列
+
+**b. 并发队列（Concurrent Dispatch Queue）**
+简单理解并发队列就是同时执行多个任务，现实中的极端例子，去银行排队办业务，有多个窗口同时可以办业务，即是并发队列，需要注意的是，这些任务会按照被添加的顺序依次开始执行。但是任务完成的顺序是任意的。
+
+这里的提到的“任务”，在 GCD 里指的是 block，即一段需要执行的代码块
+
+**c. 创建队列**
+
+```
+    //主线程队列
+    dispatch_queue_t mainQueue = dispatch_get_main_queue();
+    
+    //全局队列
+    dispatch_queue_t globalQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    
+    //自行创建一个串行队列
+    dispatch_queue_t serialQueue = dispatch_queue_create("serialQueue", DISPATCH_QUEUE_SERIAL);
+    
+    //自行创建一个并发队列
+    dispatch_queue_t concurrentQueue = dispatch_queue_create("concurrentQueue", DISPATCH_QUEUE_CONCURRENT);
+```
+**说明：**
+
+* 主线程队列：主线程的串行队列
+* 全局队列: 全局的并发队列，很多时候可以不需要自己创建并发队列，直接获取全局队列即可 第一个参数为优先级，这是个大概优先级设置
+
+```
+DISPATCH_QUEUE_PRIORITY_HIGH  //高优先级
+DISPATCH_QUEUE_PRIORITY_DEFAULT //默认优先级
+DISPATCH_QUEUE_PRIORITY_LOW //低优先级
+DISPATCH_QUEUE_PRIORITY_BACKGROUND //后台优先级
+```
+* dispatch_queue_create创建一个dispatch_queue_t队列，第一个参数设置该队列标识符，用于调试使用，第二个参数，则是队列类型
+
+```
+DISPATCH_QUEUE_SERIAL   串行队列
+DISPATCH_QUEUE_CONCURRENT   并发队列
+```
+
+## 2. 任务执行方式
+
+**a.同步执行(dispatch_sync)**
+完成任务后才会返回，进行下一任务，可见同步不具备开启线程能力，只会在当前线程依次执行
+
+**b.异步执行(dispatch_async)**
+完成任务后立即返回，进行下一任务，具备多线程能力
+
+**总结：**并发队列只会在异步执行下生效，同步执行不会触发多线程创建。
+
+串行和并行队列分别可以同步异步执行就有4种组合方式：
+
+* 串行队列同步执行
+* 串行队列异步执行
+* 并行队列同步执行
+* 并行队列异步执行
+
+# 三、GCD的实现
+首先创建一个串行队列，一个并行队列
+
+```
+//串行队列
+dispatch_queue_t serialQueue = dispatch_queue_create("serialQueue", DISPATCH_QUEUE_SERIAL);
+    
+//并发队列
+dispatch_queue_t concurrentQueue = dispatch_queue_create("concurrentQueue", DISPATCH_QUEUE_CONCURRENT);
+```
+
+## 1. 串行队列同步执行
+
+```
+    NSLog(@"Begin");
+    //串行队列同步执行
+    dispatch_sync(serialQueue, ^{
+        for (int i = 0; i < 3; i ++) {
+           NSLog(@"%d---------串行队列同步执行%@", i,[NSThread currentThread]);
+        }
+    });
+    dispatch_sync(serialQueue, ^{
+        for (int i = 0; i < 3; i ++) {
+            NSLog(@"%d---------串行队列同步执行%@", i,[NSThread currentThread]);
+        }
+    });
+    NSLog(@"End");
+```
+运行结果如下:
+
+```
+2017-05-03 17:25:48.225 GCDDemo[43694:625941] Begin
+2017-05-03 17:25:48.225 GCDDemo[43694:625941] 0---------串行队列同步执行<NSThread: 0x60800007f880>{number = 1, name = main}
+2017-05-03 17:25:48.226 GCDDemo[43694:625941] 1---------串行队列同步执行<NSThread: 0x60800007f880>{number = 1, name = main}
+2017-05-03 17:25:48.226 GCDDemo[43694:625941] 2---------串行队列同步执行<NSThread: 0x60800007f880>{number = 1, name = main}
+2017-05-03 17:25:48.226 GCDDemo[43694:625941] 0---------串行队列同步执行<NSThread: 0x60800007f880>{number = 1, name = main}
+2017-05-03 17:25:48.227 GCDDemo[43694:625941] 1---------串行队列同步执行<NSThread: 0x60800007f880>{number = 1, name = main}
+2017-05-03 17:25:48.227 GCDDemo[43694:625941] 2---------串行队列同步执行<NSThread: 0x60800007f880>{number = 1, name = main}
+2017-05-03 17:25:48.228 GCDDemo[43694:625941] End
+```
+**总结:** 串行队列同步执行不会开辟多线程，只会在一条线程中依次执行
+
+**特殊情况：**主线程同步执行
+
+```
+NSLog(@"Begin");
+    
+//主线程同步同步执行
+dispatch_sync(mainQueue, ^{
+    NSLog(@"主线程同步同步执行");
+});
+    
+NSLog(@"End");
+```
+运行结果：
+
+```
+2017-05-03 16:50:31.542 GCDDemo[41489:596607] Begin
+```
+只打印了begin，并没有执行下去，这种情况称作：**死锁**。
+之前说过dispatch_sync会等待上一个任务执行完才会执行下一个任务，sync添加的任务需要执行，需要等待NSLog(@"End")执行完毕，NSLog(@"End")任务本身也添加在主线程队列中，所以也需要等待sync添加的任务执行完毕，相互等待，无法执行下去，这就出现了死锁。
+
+## 2. 串行队列异步执行
+
+```
+NSLog(@"Begin");
+    //串行队列异步执行
+    dispatch_async(serialQueue, ^{
+        for (int i = 0; i < 3; i ++) {
+           NSLog(@"%d---------串行队列异步执行%@", i,[NSThread currentThread]);
+        }
+    });
+    dispatch_async(serialQueue, ^{
+        for (int i = 0; i < 3; i ++) {
+            NSLog(@"%d---------串行队列异步执行%@", i,[NSThread currentThread]);
+        }
+    });
+    NSLog(@"End");
+```
+运行结果：
+
+```
+2017-05-03 17:20:16.514 GCDDemo[43349:621375] Begin
+2017-05-03 17:20:16.514 GCDDemo[43349:621375] End
+2017-05-03 17:20:16.515 GCDDemo[43349:621680] 0---------串行队列异步执行<NSThread: 0x608000268040>{number = 3, name = (null)}
+2017-05-03 17:20:16.515 GCDDemo[43349:621680] 1---------串行队列同步执行<NSThread: 0x608000268040>{number = 3, name = (null)}
+2017-05-03 17:20:16.515 GCDDemo[43349:621680] 2---------串行队列异步执行<NSThread: 0x608000268040>{number = 3, name = (null)}
+2017-05-03 17:20:16.516 GCDDemo[43349:621680] 0---------串行队列异步执行<NSThread: 0x608000268040>{number = 3, name = (null)}
+2017-05-03 17:20:16.516 GCDDemo[43349:621680] 1---------串行队列异步执行<NSThread: 0x608000268040>{number = 3, name = (null)}
+2017-05-03 17:20:16.516 GCDDemo[43349:621680] 2---------串行队列异步执行<NSThread: 0x608000268040>{number = 3, name = (null)}
+```
+**总结:** 串行队列异步执行不会开辟多线程，只会在一条线程中依次执行
+
+串行队列同步和异步执行都不会开辟多线程，在一条线程中执行，那么对于串行队列同步和异步执行的区别在于：是否会堵塞当前队列。
+
+* 异步执行（dispatch_async）：不会阻塞当前队列。立即返回，将任务添加到当前队列后面，可以看到上图打印结果，先打印end。再打印async任务
+* 同步执行（dispatch_sync）：会阻塞当前队列。等该sync任务全部执行完毕之后，再执行后面的任务，可以看到上图打印结果，先打印完sync任务打印end。
+
+
+## 3. 并行队列同步执行
+
+```
+NSLog(@"Begin");
+    //串行队列同步执行
+    dispatch_sync(concurrentQueue, ^{
+        for (int i = 0; i < 3; i ++) {
+           NSLog(@"%d---------并发队列同步执行%@", i,[NSThread currentThread]);
+        }
+    });
+    dispatch_sync(concurrentQueue, ^{
+        for (int i = 0; i < 3; i ++) {
+            NSLog(@"%d---------并发队列同步执行%@", i,[NSThread currentThread]);
+        }
+    });
+    dispatch_sync(concurrentQueue, ^{
+        for (int i = 0; i < 3; i ++) {
+            NSLog(@"%d---------并发队列同步执行%@", i,[NSThread currentThread]);
+        }
+    });
+    NSLog(@"End");
+```
+运行结果：
+
+```
+2017-05-03 17:34:24.407 GCDDemo[44222:633000] 0---------并发队列同步执行<NSThread: 0x60800006f380>{number = 1, name = main}
+2017-05-03 17:34:24.407 GCDDemo[44222:633000] 1---------并发队列同步执行<NSThread: 0x60800006f380>{number = 1, name = main}
+2017-05-03 17:34:24.408 GCDDemo[44222:633000] 2---------并发队列同步执行<NSThread: 0x60800006f380>{number = 1, name = main}
+2017-05-03 17:34:24.408 GCDDemo[44222:633000] 0---------并发队列同步执行<NSThread: 0x60800006f380>{number = 1, name = main}
+2017-05-03 17:34:24.408 GCDDemo[44222:633000] 1---------并发队列同步执行<NSThread: 0x60800006f380>{number = 1, name = main}
+2017-05-03 17:34:24.408 GCDDemo[44222:633000] 2---------并发队列同步执行<NSThread: 0x60800006f380>{number = 1, name = main}
+2017-05-03 17:34:24.410 GCDDemo[44222:633000] End
+```
+**总结：** 并发队列同步执行不会开辟多线程，只会在一条线程中依次执行
+
+
+## 4. 并行队列异步执行
+
+```
+NSLog(@"Begin");
+//并发队列异步执行
+dispatch_async(concurrentQueue, ^{
+    for (int i = 0; i < 3; i ++) {
+       NSLog(@"%d---------并发队列异步执行%@", i,[NSThread currentThread]);
+    }
+});
+dispatch_async(concurrentQueue, ^{
+    for (int i = 0; i < 3; i ++) {
+        NSLog(@"%d---------并发队列异步执行%@", i,[NSThread currentThread]);
+    }
+});
+NSLog(@"End");
+```
+运行结果：
+
+```
+2017-05-03 17:38:10.893 GCDDemo[44461:636216] Begin
+2017-05-03 17:38:10.894 GCDDemo[44461:636216] End
+2017-05-03 17:38:10.894 GCDDemo[44461:636252] 0---------并发队列异步执行<NSThread: 0x60800007a700>{number = 4, name = (null)}
+2017-05-03 17:38:10.894 GCDDemo[44461:636251] 0---------并发队列异步执行<NSThread: 0x60800007a800>{number = 3, name = (null)}
+2017-05-03 17:38:10.897 GCDDemo[44461:636252] 1---------并发队列异步执行<NSThread: 0x60800007a700>{number = 4, name = (null)}
+2017-05-03 17:38:10.900 GCDDemo[44461:636251] 1---------并发队列异步执行<NSThread: 0x60800007a800>{number = 3, name = (null)}
+2017-05-03 17:38:10.903 GCDDemo[44461:636252] 2---------并发队列异步执行<NSThread: 0x60800007a700>{number = 4, name = (null)}
+2017-05-03 17:38:10.905 GCDDemo[44461:636251] 2---------并发队列异步执行<NSThread: 0x60800007a800>{number = 3, name = (null)}
+```
+**总结：** 并发队列异步执行会开辟多线程执行，并且执行顺序不定
+
+**最后：**
+
+1. 并发队列只会在异步执行下才会开启多线程执行
+2. 在主线程队列同步执行，会发生死锁，（据说串行队列嵌套串行队列同步任务会发生死锁）
+3. dispatch_async: 不会阻塞当前队列，立即返回添加当前线程后面任务。
+4. dispatch_sync：会阻塞当前队列，等该sync任务全部执行完毕之后再添加当前队列后面任务
+
+
+
+
+
+
+
+
+
+
+
+
+
+
