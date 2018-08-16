@@ -1,0 +1,181 @@
+---
+layout:     post
+title:      GCD的理解与使用（二）
+subtitle:   GCD 
+date:       2017-05-09
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - GCD 多线程
+---
+
+# 一、GCD常用API
+## 1.dispatch_once
+
+```
+static dispatch_once_t onceToken;  
+    dispatch_once(&onceToken, ^{  
+        sharedManager = [[SchoolManager alloc] init];  
+    }); 
+```
+在block中的代码，全局只会执行一次，常用于单例。
+
+## 2.dispatch_after
+
+```
+dispatch_time_t time=dispatch_time(DISPATCH_TIME_NOW, 10*NSEC_PER_SEC);
+dispatch_after(time, dispatch_get_main_queue(), ^{
+        NSLog(@"After");
+    });
+```
+延迟执行，可以作为定时执行作用。需要注意的是，该函数并不是在指定时间后执行处理，而只是在指定时间追加到dispatch_queue中,实际执行时间受到runloop的状态影响，存在一定偏差。
+
+## 3.dispatch_group
+
+有这样的需求，异步处理完A和B任务，两者都执行完执行C任务。
+
+```
+dispatch_group_t group = dispatch_group_create();
+dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+
+NSLog(@"group one start");
+
+dispatch_group_enter(group);
+dispatch_async(queue, ^{
+
+    sleep(1); //这里线程睡眠1秒钟，模拟异步请求
+    NSLog(@"group one finish");
+    dispatch_group_leave(group);
+});
+
+dispatch_group_notify(group, queue, ^{
+    NSLog(@"group finished");
+});
+```
+结果：
+
+```
+2017-05-09 10:34:07.672 group one start
+2017-05-09 10:34:08.677 group one finish
+2017-05-09 10:34:08.678 group finished
+```
+
+## 4.dispatch_apply
+
+按指定次数将指定的Block追加到指定的Dispatch_Queue中，并且等待全部执行结束。可以用于遍历效果。
+
+```
+//全局队列
+    dispatch_queue_t globalQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    dispatch_apply(10, globalQueue, ^(size_t index) {
+        //重复执行10次
+        NSLog(@"%zu",index);
+    });
+    
+    //10次执行完之后，再执行Done
+    NSLog(@"Done");
+```
+
+## 5.dispatch_barrier_sync / dispatch_barrier_async （栅栏）
+
+栅栏:有时候创建两组并发任务，如果在中间加入栅栏，那么这个任务会在第一组任务完成后执行，并且第二组任务会在栅栏任务完成后才开始执行。
+
+```
+dispatch_queue_t concurrentQueue = dispatch_queue_create("ConcurrentQueue", DISPATCH_QUEUE_CONCURRENT);
+    dispatch_async(concurrentQueue, ^{
+        NSLog(@"1---------");
+    });
+    dispatch_async(concurrentQueue, ^{
+        NSLog(@"2--------");
+    });
+
+    dispatch_barrier_async(concurrentQueue, ^{
+        NSLog(@"barrier--------");
+    });
+
+    dispatch_async(concurrentQueue, ^{
+        NSLog(@"3--------");
+    });
+    dispatch_async(concurrentQueue, ^{
+        NSLog(@"4--------");
+    });
+```
+打印执行顺序1，2不定，3，4也不定，但是barrier一定在1和2之后，3和4一定在barrier之后。
+
+**dispatch_barrier**需要注意的点：
+
+1. dispatch_barrier只会对自建的队列生效，对于系统的mainQueue和GlobalQueue不起作用
+2. dispatch_barrier_async和dispatch_barrier_sync的区别也同样在于同步和异步，dispatch_barrier_async不会等待自己任务执行完毕才会在队列中添加其他任务，而dispatch_barrier_sync会等待自己任务执行完毕后才会在队列中添加其他任务。
+
+
+## 6.Dispatch Semaphore （信号量）
+
+实际开发中，会异步的下载多张图片，还有其他异步的操作，这些异步任务，每个都会开辟一个新线程，太多线程肯定cpu吃不消，这里就可以用信号量控制一下最大开辟线程数。
+
+```
+ //crate的value表示，最多几个资源可访问
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(2);   
+    dispatch_queue_t quene = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+     
+    //任务1
+    dispatch_async(quene, ^{
+        //等待降低信号量
+        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+        NSLog(@"run task 1");
+        sleep(1);
+        NSLog(@"complete task 1");
+        //提高信号量 （正常的使用顺序是先降低然后再提高，这两个函数通常成对使用）
+        dispatch_semaphore_signal(semaphore);       
+    });
+    
+    //任务2
+    dispatch_async(quene, ^{
+        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+        NSLog(@"run task 2");
+        sleep(1);
+        NSLog(@"complete task 2");
+        dispatch_semaphore_signal(semaphore);       
+    });
+    
+    //任务3
+    dispatch_async(quene, ^{
+        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+        NSLog(@"run task 3");
+        sleep(1);
+        NSLog(@"complete task 3");
+        dispatch_semaphore_signal(semaphore);       
+    });  
+```
+结果：
+
+```
+2017-05-09 13:55:28.020849  run task 1
+2017-05-09 13:55:28.020972  run task 2
+2017-05-09 13:55:29.021005  complete task 1
+2017-05-09 13:55:29.021110  complete task 2
+2017-05-09 13:55:30.020972  run task 3
+2017-05-09 13:55:32.021005  complete task 3
+```
+由于设定的信号值为2，先执行两个线程，等执行完，才会继续执行下一个，保证同一时间执行的线程数不超过2。
+
+
+**注**：
+dispatch_semaphore_t 信号量本质上是一种锁。
+关于iOS中各种锁和性能比较可以看下YY大神的这篇博文
+[不再安全的 OSSpinLock](https://blog.ibireme.com/2016/01/16/spinlock_is_unsafe_in_ios/)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
