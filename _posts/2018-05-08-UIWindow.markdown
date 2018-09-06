@@ -1,0 +1,15 @@
+---
+layout:     post
+title:      UIWindow
+subtitle:   UIWindow
+date:       2018-04-24
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - UIWindow keyWindow
+---
+
+站在巨人的肩膀上
+[UIWindow 详解及使用场景](https://www.cnblogs.com/junhuawang/p/6004918.html)    
+[keyWindow与delegate中Window的区别](https://www.jianshu.com/p/d5668e0356a7)
