@@ -1,0 +1,65 @@
+---
+layout:     post
+title:      浮点数的比较
+subtitle:   GCD 
+date:       2017-04-29
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - 浮点数 FLT_EPSILON DBL_EPSILON fabs fabsf
+---
+
+# 一 定义
+FLT_EPSILON和__FLT_EPSILON__是一个意思，表示的是float类型（单精度浮点数）所能识别的最小精度。DBL_EPSILON和__DBL_EPSILON__表示的是double类型所能识别的最小精度，LDBL_EPSILON和__LDBL_EPSILON__表示的是long double类型所能识别的最小精度；它们常用于比较当中
+
+```
+double a = 0.5;
+if (a == 0.5) {
+    NSLog(@"a = 0.5是正确的。");
+} else {
+    NSLog(@"a = 0.5不是正确的。");
+}
+NSLog(@"a的值为: %f", a);
+
+double b = sin(M_PI / 6.0);
+if (b == 0.5) {
+    NSLog(@"b = 0.5是正确的。");
+} else {
+    NSLog(@"b = 0.5不是正确的。");
+}
+NSLog(@"b的值为：%f", b);
+```
+第一个比较正确，因为0.5在double类型的存储精度范围内；
+第二个比较可能正确也可能错误，结果取决于处理器、编译器的版本和设置；
+
+# 二 用法
+上面比较b的正确方法应该是这样：
+
+```
+if (fabs(b - 0.5) < DBL_EPSILON) {
+    NSLog(@"b = 0.5是正确的。");
+} else {
+    NSLog(@"b = 0.5不是正确的。");
+}
+NSLog(@"b的值为：%f", b);
+```
+同样的，FLT_EPSILON和LDBL_EPSILON也是这样使用。
+
+# 三、总结
+1. EPSILON是最小误差，是EPSILON+X不等于X的最小的正数；
+2. 在比较浮点数的时候，一定要注意精度的问题；
+
+
+
+
+
+
+
+
+
+
+
+
+
+
