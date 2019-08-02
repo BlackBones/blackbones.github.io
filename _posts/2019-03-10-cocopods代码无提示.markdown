@@ -1,0 +1,21 @@
+---
+layout:     post
+title:      MVVM + RAC
+subtitle:   cocopods 代码无提示
+date:       2019-03-10
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - cocopods
+---
+
+在使用cocopods的过程中，发现pod管理的库使用import时，没有自动提示，很不方便。可以是试试以下解决方法；
+
+1. 首先，找到targets 搜索 User Header Search Paths，为他增加 cocopods检索路径
+2. 双击 “User Header Search Paths”，增加配置：$(PODS_ROOT)，选择：recursive（之后会在相应的目录递归检索头文件）
+3. 一般情况下，添加之后import就会有提示了，但是升级Xcode 10之后任然不行，Google之后找到解决办法：
+Xcode - File - Workspace Settings - Bulid System -  将New Build System 改为 Legacy Build Syatem
+
+这样应该会有提示了，记录以下。
+
