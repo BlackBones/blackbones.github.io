@@ -1,0 +1,49 @@
+---
+layout:     post
+title:      声明常量的几种做法
+subtitle:   iOS中声明常量FOUNDATION_EXPORT extern #define
+date:       2019-04-16
+author:     BlackBones
+header-img: img/post-bg-BJJ.jpg
+catalog: true
+tags:
+    - FOUNDATION_EXPORT extern  #define
+---
+
+# iOS中声明常量，常用的几种做法 FOUNDATION_EXPORT extern #define
+
+* FOUNDATION_EXPORT是Fundation框架里面的宏，c/c++中不能使用 （官方推荐）
+* extern是c/c++的关键字,oc/c/c++通用
+* #define是oc/c/c++通用宏定义关键字
+
+# 1，用法
+* **FOUNDATION_EXPORT**
+
+在.h文件中
+FOUNDATION_EXPORT  NSString *const kMyConstantString;
+
+在.m文件中
+ NSString *const kMyConstantString = @"hello world";
+ 
+ 在其他文件中引入头文件，即可使用。
+
+* **extern**
+
+用法同FOUNDATION_EXPORT，声明
+.h
+extern NSString *const TEST;
+.m
+NSString *const TEST = @"hello world";
+
+在其他文件中引入头文件，即可使用。
+
+* **#define**
+定义最为简单，预处理指令
+
+# 2，如何选择使用这3中声明常量的方式
+* 前2种可以说没什么区别，FOUNDATION_EXPORT是Fundation框架里面的宏，extern是C中的关键字，当然是推荐官方的FOUNDATION_EXPORT
+* 比较字符串是否相同除了用运算符 == 还可以用 isEqualToString: ，前2种用运算符 ==和isEqualToString:都没问题，值得注意的是用#define 定义的字符串用运算符 == 比较的话会提示警告Direct comparison of a string literal has undefined behavior(但是也能正常编译)。
+* 如果为了省事直接用#define也是可以的，但是不建议太多，因为是预处理阶段，会耗费更多时间
+
+
+
