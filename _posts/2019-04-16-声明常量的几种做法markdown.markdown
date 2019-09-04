@@ -19,21 +19,32 @@ tags:
 # 1，用法
 * **FOUNDATION_EXPORT**
 
+
+```
 在.h文件中
 FOUNDATION_EXPORT  NSString *const kMyConstantString;
+```
 
+```
 在.m文件中
  NSString *const kMyConstantString = @"hello world";
+```
  
  在其他文件中引入头文件，即可使用。
 
 * **extern**
 
 用法同FOUNDATION_EXPORT，声明
+
+```
 .h
 extern NSString *const TEST;
+```
+
+```
 .m
 NSString *const TEST = @"hello world";
+```
 
 在其他文件中引入头文件，即可使用。
 
